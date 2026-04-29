@@ -301,3 +301,90 @@ func isValidFrameID(id string) bool {
 	}
 	return true
 }
+
+// ParseFromMPEGTS extracts ID3 tags from data that may be raw MPEGTS.
+//
+// If data looks like MPEGTS (starts with sync byte 0x47, length is a multiple
+// of 188), it walks the TS packets, reassembles PES payloads per PID, strips
+// PES headers, and calls Parse on each ID3 blob found. Otherwise it falls back
+// to Parse directly — so raw AAC segments and non-TS input work unchanged.
+func ParseFromMPEGTS(data []byte) ([]Tag, error) {
+	if len(data) < 188 || data[0] != 0x47 || len(data)%188 != 0 {
+		return Parse(data)
+	}
+
+	bufs := make(map[uint16][]byte)
+	var id3Blobs [][]byte
+
+	// collect checks the first 32 bytes of buf for "ID3" magic and, if found,
+	// appends buf[idx:] to id3Blobs. 32 bytes is enough to cover any PES header
+	// (max ~19 bytes) plus the 3-byte magic.
+	collect := func(buf []byte) {
+		if len(buf) == 0 {
+			return
+		}
+		limit := len(buf)
+		if limit > 32 {
+			limit = 32
+		}
+		idx := bytes.Index(buf[:limit], []byte("ID3"))
+		if idx >= 0 {
+			id3Blobs = append(id3Blobs, buf[idx:])
+		}
+	}
+
+	for i := 0; i+188 <= len(data); i += 188 {
+		pkt := data[i : i+188]
+		if pkt[0] != 0x47 {
+			continue // lost sync, skip
+		}
+
+		pid := uint16(pkt[1]&0x1F)<<8 | uint16(pkt[2])
+		pusi := pkt[1]&0x40 != 0
+		afc := (pkt[3] >> 4) & 0x03
+
+		if afc&0x01 == 0 {
+			continue // no payload in this packet
+		}
+
+		// Determine where the payload starts within the 188-byte packet.
+		// Bytes 0-3 are the TS header. If an adaptation field is present
+		// (afc & 0x02), byte 4 is its length and we skip past it.
+		payloadStart := 4
+		if afc&0x02 != 0 {
+			if len(pkt) <= 4 {
+				continue
+			}
+			payloadStart = 5 + int(pkt[4])
+		}
+		if payloadStart >= 188 {
+			continue
+		}
+		payload := pkt[payloadStart:]
+
+		if pusi {
+			// A new PES is starting on this PID. Flush whatever was
+			// accumulated for this PID (it's a completed PES).
+			collect(bufs[pid])
+			newBuf := make([]byte, len(payload))
+			copy(newBuf, payload)
+			bufs[pid] = newBuf
+		} else if _, ok := bufs[pid]; ok {
+			// Continuation packet — only accumulate if we already have
+			// a buffer for this PID (i.e., we saw its PUSI packet).
+			bufs[pid] = append(bufs[pid], payload...)
+		}
+	}
+
+	// Flush any PES still in progress at end of segment.
+	for _, buf := range bufs {
+		collect(buf)
+	}
+
+	var allTags []Tag
+	for _, blob := range id3Blobs {
+		tags, _ := Parse(blob)
+		allTags = append(allTags, tags...)
+	}
+	return allTags, nil
+}
