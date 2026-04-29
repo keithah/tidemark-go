@@ -299,3 +299,45 @@ func TestParseExtendedHeader(t *testing.T) {
 		t.Errorf("Value = %q, want 'OK'", tags[0].Value)
 	}
 }
+
+func TestGenericTextFrameTPE1(t *testing.T) {
+	frame := buildFrame("TPE1", 3, []byte{0x00, 'A', 'r', 't', 'i', 's', 't'})
+	tag := buildTag(3, frame)
+	tags, err := Parse(tag)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(tags) != 1 {
+		t.Fatalf("expected 1 tag, got %d", len(tags))
+	}
+	if tags[0].ID != "TPE1" || tags[0].Value != "Artist" {
+		t.Errorf("got {%s, %q}, want {TPE1, Artist}", tags[0].ID, tags[0].Value)
+	}
+}
+
+func TestGenericTextFrameTALB(t *testing.T) {
+	frame := buildFrame("TALB", 3, []byte{0x00, 'A', 'l', 'b', 'u', 'm'})
+	tag := buildTag(3, frame)
+	tags, err := Parse(tag)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(tags) != 1 || tags[0].ID != "TALB" || tags[0].Value != "Album" {
+		t.Errorf("got %v, want [{TALB Album}]", tags)
+	}
+}
+
+func TestTXXXNotCaughtByGenericTFrame(t *testing.T) {
+	// TXXX must still use parseTXXXFrame, which produces "desc:value" format.
+	// The generic T-frame path would lose the description prefix.
+	data := []byte{0x00, 'd', 'e', 's', 'c', 0x00, 'v', 'a', 'l'}
+	frame := buildFrame("TXXX", 3, data)
+	tag := buildTag(3, frame)
+	tags, _ := Parse(tag)
+	if len(tags) != 1 {
+		t.Fatalf("expected 1 tag, got %d", len(tags))
+	}
+	if tags[0].Value != "desc:val" {
+		t.Errorf("TXXX Value = %q, want 'desc:val'", tags[0].Value)
+	}
+}

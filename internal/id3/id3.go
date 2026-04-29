@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"unicode/utf16"
 )
 
@@ -118,7 +119,7 @@ func Parse(data []byte) ([]Tag, error) {
 
 func parseFrame(id string, data []byte) *Tag {
 	switch {
-	case id == "TIT2" || id == "TIT3":
+	case strings.HasPrefix(id, "T") && id != "TXXX":
 		return parseTextFrame(id, data)
 	case id == "TXXX":
 		return parseTXXXFrame(data)
