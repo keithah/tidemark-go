@@ -374,3 +374,109 @@ func TestTXXXNotCaughtByGenericTFrame(t *testing.T) {
 		t.Errorf("TXXX Value = %q, want 'desc:val'", tags[0].Value)
 	}
 }
+
+func TestParseFromMPEGTSFallback(t *testing.T) {
+	// Non-MPEGTS input: doesn't start with 0x47, len is not a multiple of 188.
+	// ParseFromMPEGTS must fall back to Parse and return the same result.
+	frame := buildFrame("TIT2", 3, []byte{0x00, 'X'})
+	data := buildTag(3, frame)
+	// data is ~20 bytes; not divisible by 188, not a sync byte at [0]
+	tags, err := ParseFromMPEGTS(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tags) != 1 || tags[0].ID != "TIT2" || tags[0].Value != "X" {
+		t.Errorf("fallback: got %v, want [{TIT2 X}]", tags)
+	}
+}
+
+func TestParseFromMPEGTSSinglePacket(t *testing.T) {
+	// ID3 tag small enough to fit in one TS packet payload (184 bytes).
+	f1 := buildFrame("TIT2", 3, []byte{0x00, 'T', 'i', 't', 'l', 'e'})
+	f2 := buildFrame("TPE1", 3, []byte{0x00, 'A', 'r', 't', 'i', 's', 't'})
+	id3data := buildTag(3, f1, f2)
+
+	tsData := buildMPEGTSSegment(0x0104, id3data)
+	if len(tsData) != 188 {
+		t.Fatalf("test setup: expected 1 TS packet (188 bytes), got %d", len(tsData))
+	}
+
+	tags, err := ParseFromMPEGTS(tsData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	tagMap := make(map[string]string)
+	for _, tag := range tags {
+		tagMap[tag.ID] = tag.Value
+	}
+	if tagMap["TIT2"] != "Title" {
+		t.Errorf("TIT2 = %q, want 'Title'", tagMap["TIT2"])
+	}
+	if tagMap["TPE1"] != "Artist" {
+		t.Errorf("TPE1 = %q, want 'Artist'", tagMap["TPE1"])
+	}
+}
+
+func TestParseFromMPEGTSMultiPacket(t *testing.T) {
+	// ID3 tag large enough to span two TS packet payloads.
+	// Each TS payload = 184 bytes; PES header = 9 bytes.
+	// So ID3 data > 175 bytes forces a second packet.
+	longTitle := strings.Repeat("A", 200)
+	f1 := buildFrame("TIT2", 3, append([]byte{0x00}, []byte(longTitle)...))
+	f2 := buildFrame("TPE1", 3, []byte{0x00, 'B'})
+	id3data := buildTag(3, f1, f2)
+
+	tsData := buildMPEGTSSegment(0x0104, id3data)
+	if len(tsData) < 188*2 {
+		t.Fatalf("test setup: expected multi-packet data, got %d bytes", len(tsData))
+	}
+
+	tags, err := ParseFromMPEGTS(tsData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	tagMap := make(map[string]string)
+	for _, tag := range tags {
+		tagMap[tag.ID] = tag.Value
+	}
+	if tagMap["TIT2"] != longTitle {
+		t.Errorf("TIT2 = %q (len %d), want %q (len %d)",
+			tagMap["TIT2"], len(tagMap["TIT2"]), longTitle, len(longTitle))
+	}
+	if tagMap["TPE1"] != "B" {
+		t.Errorf("TPE1 = %q, want 'B'", tagMap["TPE1"])
+	}
+}
+
+func TestParseFromMPEGTSMultiplePIDs(t *testing.T) {
+	// Two PIDs in the same segment: one audio (no ID3), one timed_id3.
+	// Only the timed_id3 PID should produce tags.
+	audioData := buildMPEGTSSegment(0x0100, []byte("raw audio payload no metadata"))
+
+	frame := buildFrame("TIT2", 3, []byte{0x00, 'X'})
+	id3data := buildTag(3, frame)
+	id3TS := buildMPEGTSSegment(0x0104, id3data)
+
+	combined := append(audioData, id3TS...)
+
+	tags, err := ParseFromMPEGTS(combined)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tags) != 1 || tags[0].ID != "TIT2" || tags[0].Value != "X" {
+		t.Errorf("got %v, want [{TIT2 X}]", tags)
+	}
+}
+
+func TestParseFromMPEGTSNonID3PES(t *testing.T) {
+	// TS segment whose PES payload does not contain ID3 magic.
+	// Expect zero tags and no error.
+	tsData := buildMPEGTSSegment(0x0100, []byte("raw audio payload no metadata"))
+	tags, err := ParseFromMPEGTS(tsData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tags) != 0 {
+		t.Errorf("expected 0 tags from non-ID3 PES, got %d: %v", len(tags), tags)
+	}
+}
