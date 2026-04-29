@@ -57,7 +57,7 @@ func ParseFromMPEGTS(data []byte) ([]Tag, error)
 
 3. **Flush remaining buffers** after all packets: any PID buffer starting with `ID3` is added to the completed list.
 
-4. **Strip PES header.** Each completed blob may be preceded by a PES header. Scan the first 32 bytes for the `ID3` magic to find the actual ID3 start offset (PES header is at most ~19 bytes). Slice from that offset before passing to `Parse`.
+4. **Strip PES header.** Each completed blob may be preceded by a PES header. Search for the first occurrence of bytes `0x49 0x44 0x33` (`ID3`) within the first 32 bytes of the blob. If found, slice from that offset before passing to `Parse`. If not found within 32 bytes, skip the blob — it is not a valid ID3 PES payload.
 
 5. **Merge results.** Call `Parse` on each extracted blob, collect all `[]Tag` slices, return combined slice.
 
