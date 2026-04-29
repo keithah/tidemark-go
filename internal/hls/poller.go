@@ -222,7 +222,7 @@ func (p *Poller) downloadAndDecode(ctx context.Context, segURL string, seg int, 
 	}
 
 	// ID3 extraction
-	tags, _ := id3.Parse(data)
+	tags, _ := id3.ParseFromMPEGTS(data)
 	for _, tag := range tags {
 		m := &marker.Marker{
 			Type:      marker.MarkerID3,
