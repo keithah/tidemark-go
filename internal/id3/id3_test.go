@@ -390,6 +390,25 @@ func TestParseFromMPEGTSFallback(t *testing.T) {
 	}
 }
 
+func TestParseFromMPEGTSFallbackWrongSyncByte(t *testing.T) {
+	// Exactly 188 bytes (divisible by 188) but does not start with 0x47.
+	// ParseFromMPEGTS must still fall back to Parse, not treat this as MPEGTS.
+	// Real-world case: a 188-byte AAC segment with an ID3 tag prepended.
+	frame := buildFrame("TIT2", 3, []byte{0x00, 'Y'})
+	id3tag := buildTag(3, frame) // ~22 bytes, starts with 'I' (0x49)
+	// Pad to exactly 188 bytes
+	data := make([]byte, 188)
+	copy(data, id3tag)
+	// data[0] == 'I' (0x49), not 0x47; len(data) == 188 (divisible by 188)
+	tags, err := ParseFromMPEGTS(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tags) != 1 || tags[0].ID != "TIT2" || tags[0].Value != "Y" {
+		t.Errorf("fallback (wrong sync byte): got %v, want [{TIT2 Y}]", tags)
+	}
+}
+
 func TestParseFromMPEGTSSinglePacket(t *testing.T) {
 	// ID3 tag small enough to fit in one TS packet payload (184 bytes).
 	f1 := buildFrame("TIT2", 3, []byte{0x00, 'T', 'i', 't', 'l', 'e'})
@@ -421,6 +440,8 @@ func TestParseFromMPEGTSMultiPacket(t *testing.T) {
 	// ID3 tag large enough to span two TS packet payloads.
 	// Each TS payload = 184 bytes; PES header = 9 bytes.
 	// So ID3 data > 175 bytes forces a second packet.
+	// 200 chars exceeds the 175-byte single-packet limit (184-byte payload minus 9-byte PES header),
+	// guaranteeing the title body is split across packet boundaries.
 	longTitle := strings.Repeat("A", 200)
 	f1 := buildFrame("TIT2", 3, append([]byte{0x00}, []byte(longTitle)...))
 	f2 := buildFrame("TPE1", 3, []byte{0x00, 'B'})
