@@ -35,5 +35,5 @@ changelog:
 release:
   github:
     owner: keithah
-    name: tidemark
+    name: tidemark-go
   name_template: "v{{.Version}}"

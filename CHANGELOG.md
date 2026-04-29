@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Full ID3v2 text frame coverage** — all standard `T***` frames (TPE1 artist, TALB album, TCON genre, TDRC date, TRCK track, TPOS disc, etc.) are now parsed; previously only TIT2 and TIT3 were extracted
 - **MPEGTS timed_id3 extraction** — new `ParseFromMPEGTS` function correctly reassembles ID3 payloads from MPEGTS TS packet PES streams, enabling reliable metadata extraction from MPEGTS-segmented HLS streams (stream type 0x15 / timed_id3); previously tags spanning more than one TS packet payload (~180 bytes) were silently corrupted
 
-[0.2.0]: https://github.com/keithah/tidemark/releases/tag/v0.2.0
+[0.2.0]: https://github.com/keithah/tidemark-go/releases/tag/v0.2.0
 
 ## [0.1.0] - 2026-03-20
 
@@ -34,4 +34,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Startup banner** — shows URL, detected stream type, filter, and output mode on stderr
 - **167 tests** across 10 packages with zero failures
 
-[0.1.0]: https://github.com/keithah/tidemark/releases/tag/v0.1.0
+[0.1.0]: https://github.com/keithah/tidemark-go/releases/tag/v0.1.0
