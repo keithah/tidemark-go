@@ -56,6 +56,39 @@ func buildTag(version int, frames ...[]byte) []byte {
 	return append(header, frameData...)
 }
 
+// buildMPEGTSSegment wraps id3data in a minimal PES packet and packs it into
+// 188-byte MPEGTS TS packets. The first packet has PUSI=1; subsequent packets
+// have PUSI=0. The PES header is 9 bytes: start code (00 00 01), stream_id
+// (0xFC = private), 2-byte length (0 = unbounded), and 3 optional header bytes
+// (flags=0x80, no PTS/DTS, header_data_length=0).
+func buildMPEGTSSegment(pid uint16, id3data []byte) []byte {
+	// Build PES: 9-byte header + id3data
+	pes := make([]byte, 9+len(id3data))
+	copy(pes[:9], []byte{0x00, 0x00, 0x01, 0xFC, 0x00, 0x00, 0x80, 0x00, 0x00})
+	copy(pes[9:], id3data)
+
+	var result []byte
+	remaining := pes
+	first := true
+	cc := byte(0)
+	for len(remaining) > 0 {
+		pkt := make([]byte, 188)
+		pkt[0] = 0x47
+		pkt[1] = byte(pid>>8) & 0x1F
+		if first {
+			pkt[1] |= 0x40 // PUSI
+		}
+		pkt[2] = byte(pid)
+		pkt[3] = 0x10 | cc // payload only, no adaptation field
+		n := copy(pkt[4:], remaining)
+		remaining = remaining[n:]
+		result = append(result, pkt...)
+		first = false
+		cc = (cc + 1) & 0x0F
+	}
+	return result
+}
+
 func TestParseTIT2v23(t *testing.T) {
 	frame := buildFrame("TIT2", 3, []byte{0x00, 'H', 'e', 'l', 'l', 'o'}) // encoding=0 (ISO-8859-1)
 	tag := buildTag(3, frame)
