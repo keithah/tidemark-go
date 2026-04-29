@@ -1,5 +1,7 @@
 version: 2
 
+project_name: tidemark
+
 builds:
   - main: ./cmd/tidemark
     binary: tidemark
