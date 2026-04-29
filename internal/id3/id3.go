@@ -352,9 +352,6 @@ func ParseFromMPEGTS(data []byte) ([]Tag, error) {
 		// (afc & 0x02), byte 4 is its length and we skip past it.
 		payloadStart := 4
 		if afc&0x02 != 0 {
-			if len(pkt) <= 4 {
-				continue
-			}
 			payloadStart = 5 + int(pkt[4])
 		}
 		if payloadStart >= 188 {
@@ -383,7 +380,10 @@ func ParseFromMPEGTS(data []byte) ([]Tag, error) {
 
 	var allTags []Tag
 	for _, blob := range id3Blobs {
-		tags, _ := Parse(blob)
+		tags, err := Parse(blob)
+		if err != nil {
+			_ = err // non-fatal: collect whatever frames were parsed
+		}
 		allTags = append(allTags, tags...)
 	}
 	return allTags, nil
