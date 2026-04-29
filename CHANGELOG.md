@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-29
+
+### Added
+
+- **Full ID3v2 text frame coverage** — all standard `T***` frames (TPE1 artist, TALB album, TCON genre, TDRC date, TRCK track, TPOS disc, etc.) are now parsed; previously only TIT2 and TIT3 were extracted
+- **MPEGTS timed_id3 extraction** — new `ParseFromMPEGTS` function correctly reassembles ID3 payloads from MPEGTS TS packet PES streams, enabling reliable metadata extraction from MPEGTS-segmented HLS streams (stream type 0x15 / timed_id3); previously tags spanning more than one TS packet payload (~180 bytes) were silently corrupted
+
+[0.2.0]: https://github.com/keithah/tidemark/releases/tag/v0.2.0
+
 ## [0.1.0] - 2026-03-20
 
 ### Added
